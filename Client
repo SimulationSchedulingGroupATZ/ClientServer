@@ -1,0 +1,118 @@
+import java.io.*;
+import java.net.Socket;
+import java.net.UnknownHostException;
+import java.util.ArrayList;
+import java.util.List;
+
+import static java.lang.System.in;
+
+public class Client extends Thread{
+    private Socket socket;
+    private int ClientId;
+    //那几块数据在内存
+    static List<Integer> Memory = new ArrayList<Integer>();
+    static ArrayList<Client> ClientPool = new ArrayList<>();
+    //取远程数据,同时要调用更新Memory的函数
+
+    public Client(String host,int port,int clientId)throws UnknownHostException,IOException {
+        socket = new Socket(host, port);
+        ClientId = clientId;
+    }
+
+
+    //与主机建立连接
+    public void connectSer() throws IOException{
+        new ClientThread(socket).start();
+    }
+    private class ClientThread extends Thread{
+        Socket socket;
+        String message;
+        ObjectInputStream sInput;
+        ObjectOutputStream sOutput;
+        public ClientThread(Socket socket){
+            this.socket = socket;
+
+        }
+        public void run(){
+            try{
+                sOutput = new ObjectOutputStream(socket.getOutputStream());
+                sInput  = new ObjectInputStream(socket.getInputStream());
+                message = null;
+                while(message != "Finish" || message == null){
+                    //message = String.valueOf(sInput.readChar());
+                    sOutput.writeChars("Apply");
+                    sOutput.flush();
+                    sOutput.writeInt(ClientId);
+                    sOutput.flush();
+                    if(message == "remote"){
+                        message = String.valueOf(sInput.readChar());
+                        getData(Integer.valueOf(message));
+                        sOutput.writeChars("update");
+                        sOutput.flush();
+                        sOutput.writeInt(Integer.valueOf(message));
+                        sOutput.flush();
+                        System.out.println("process task");
+                    }
+                    ProcessTask(3000);
+                    System.out.println("task finished, apply new task");
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            try {
+                if(sOutput != null) sOutput.close();
+            }
+            catch(Exception e) {}
+            try {
+                if(sInput != null) sInput.close();
+            }
+            catch(Exception e) {};
+            try {
+                if(socket != null) socket.close();
+            }
+            catch (Exception e) {}
+        }
+    }
+
+    public void getData(int serverId){
+        System.out.println("Get data from No."+ serverId);
+    }
+    synchronized public void updateMemory(int BlockId){
+        Memory.add(BlockId);
+    }
+    //模拟执行任务需要的时间
+    public void ProcessTask(long taskCost) throws InterruptedException {
+        ClientThread.sleep(taskCost);
+    }
+    //请求一个任务,需要告知Server远程task的data已经拉入本地内存
+    synchronized public int ApplyTask(){
+        String dataMessage = null;
+        int serId = 0;
+        return serId;
+    }
+    public void close(){
+        try{
+            socket.close();
+        }catch (IOException e){
+            e.printStackTrace();
+        }
+    }
+    public static void main(String arg[]){
+        try {
+//            for(int i = 0;i<100;i++){
+//                Client c = new Client("127.0.0.1",4700,i);
+//                System.out.println(i + " tread is created");
+//                ClientPool.add(c);
+//                ClientPool.get(i).connectSer();
+//            }
+            Client c = new Client("127.0.0.1",11111,1);
+            ClientPool.add(c);
+            ClientPool.get(0).connectSer();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+    }
+}
