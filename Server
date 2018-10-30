@@ -1,0 +1,183 @@
+import com.sun.xml.internal.ws.policy.privateutil.PolicyUtils;
+
+import java.io.*;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+
+public class Server {
+    private ServerSocket serverSocket;
+    private ArrayList<Socket> allSockets;
+    private static List<Integer> Job = new ArrayList<>();
+    private static HashMap<Integer,List<Integer>> ClientMemory = new HashMap<>();
+    private static HashMap<Integer,Long> InitLoad = new HashMap<>();
+    private static HashMap<Integer,List<Integer>> Local = new HashMap<>();
+    private static BufferedReader bf;
+
+    public Server(){
+        try{
+            serverSocket = new ServerSocket(11111);
+        }catch (IOException e){
+            e.printStackTrace();
+        }
+        allSockets = new ArrayList<>();
+    }
+    public void startService() throws IOException{
+        File f = new File("E:\\IntelliJ WorkSpace\\TestSocket\\test.txt");
+        initEnvironment(f);
+        while(!Job.isEmpty()){
+            Socket s = serverSocket.accept();
+            System.out.println("已接收到Client的请求...");
+            allSockets.add(s);
+            System.out.println(allSockets.size()-1 + " tread is created");
+            ServerThread ss = new ServerThread(s);
+            ss.start();
+        }
+        for(int i = 0;i<allSockets.size();i++){
+            allSockets.get(i).close();
+            System.out.println(i + " tread is closed");
+        }
+        //sT.sendMessageToAllClient("Job is finished");
+    }
+    //  public void initEnvironment(File input,String outputFile)throws IOException {
+    public void initEnvironment(File input)throws IOException {
+        FileInputStream inPut = new FileInputStream(input);
+        InputStreamReader rd = new InputStreamReader(inPut);
+//        File outFile = new File(outputFile);
+//        outFile.createNewFile();
+        bf = new BufferedReader(rd);
+        for (String line = bf.readLine(); line != null; line = bf.readLine()) {
+            if (line.startsWith("%")) {
+                line = bf.readLine();
+                //初始化load和loadCopy
+                String[] splits1 = line.split(";");
+                for (int i = 0; i < splits1.length; i++) {
+                    String[] initData = splits1[i].split(" ");
+                    InitLoad.put(Integer.valueOf(initData[0]).intValue(),Long.valueOf(initData[1]));
+                }
+                line = bf.readLine();
+                if (line.startsWith("%"))
+                    line = bf.readLine();
+                //初始化local
+                String[] splits2 = line.split(";");
+                for (int i = 0; i < splits2.length; i++) {
+                    String[] initData = splits2[i].split(" ");
+                    if(!Local.containsKey(Integer.valueOf(initData[0]).intValue())) {
+                        List<Integer> pfser = new ArrayList<>();
+                        pfser.add(Integer.valueOf(initData[1]).intValue());
+                        Local.put(Integer.valueOf(initData[0]).intValue(), pfser);
+                    }
+                    else {
+                        Local.get(Integer.valueOf(initData[0]).intValue()).add(Integer.valueOf(initData[1]).intValue());
+                        Job.add(Integer.valueOf(initData[0]).intValue());
+                    }
+                }
+            }
+        }
+    }
+    private class ServerThread extends Thread {
+        Socket socket;
+        ObjectInputStream sInput;
+        ObjectOutputStream sOutput;
+        String str;
+        public ServerThread(Socket socket) {
+            this.socket = socket;
+        }
+        public void run() {
+            try {
+                sOutput = new ObjectOutputStream(socket.getOutputStream());
+                sInput  = new ObjectInputStream(socket.getInputStream());
+                while (true) {
+                    str = String.valueOf(sInput.readChar());
+                    //System.out.println(str);
+                    if (str == "Apply" || str == null) {
+                        str = String.valueOf(sInput.readChar());
+                        //通过调用算法得出taskId
+                        int taskId = 1;
+                        int cId = Integer.valueOf(str);
+                        if (true) {
+                            System.out.println("assgin local task " + taskId +" to " + cId);
+                            sOutput.writeChars("local");
+                            sOutput.flush();
+                        } else {
+                            System.out.println("assgin remote task " + taskId +" to " + cId);
+                            sOutput.writeChars("remote");
+                            sOutput.flush();
+                            sOutput.writeInt(Local.get(taskId).get(Local.get(taskId).size()-1));
+                            sOutput.flush();
+                        }
+                        str = sInput.readObject().toString();
+                        if (str == "update") {
+                            str = String.valueOf(sInput.readChar());
+                            ClientMemory.get(cId).add(Integer.valueOf(str));
+                        }
+                    }
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            } catch (ClassNotFoundException e) {
+                e.printStackTrace();
+            }
+            try {
+                if(sOutput != null) sOutput.close();
+            }
+            catch(Exception e) {}
+            try {
+                if(sInput != null) sInput.close();
+            }
+            catch(Exception e) {};
+            try {
+                if(socket != null) socket.close();
+            }
+            catch (Exception e) {}
+        }
+
+        public void sendMessageToAllClient(String message) throws IOException {
+            for (Socket s : allSockets) {
+                PrintWriter pw = new PrintWriter(s.getOutputStream());
+                pw.println(message);
+                pw.flush();
+            }
+        }
+
+        public void sendMessageToClient(Socket s, String message) throws IOException {
+            PrintWriter pw = new PrintWriter(s.getOutputStream());
+            pw.println(message);
+            pw.flush();
+        }
+
+        //生成给Client的消息
+        //如果任务所需data在该Client本地 通知local
+        //如果data在其他服务器 告知remote和data位置
+        public String assignTaskToClient(int taskId) {
+            String result = null;
+            return result;
+        }
+
+        public void updateClientMemory(int ClientId, int BlockId) {
+        }
+
+        //判断task需要的data是否在Client内存中
+        public boolean isLocal(int taskId) {
+            return false;
+        }
+
+        //返回算法结果中 将分配给Client的任务是哪个
+        synchronized public int result() {
+            int result = Job.get(Job.size()-1);
+            Job.remove(Job.size()-1);
+            return result;
+        }
+    }
+    public static void main(String arg[]){
+        Server ser = new Server();
+        try {
+            ser.startService();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+}
